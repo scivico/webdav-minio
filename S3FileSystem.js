@@ -7,8 +7,7 @@ var mime = new MimeLookup(require('mime-db'));
 const s3 = new AWS.S3({ region: 'us-east-1' });
 const _ = require('lodash');
 var etag = require('etag');
-const Database = require('./database/dbHelper');
-const bucketName = 'webdav-bucket';
+const bucketName = process.env.BUCKET_NAME;
 
 module.exports = class S3FileSystem extends webdav.FileSystem {
 
@@ -16,6 +15,12 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     resources = {};
     database = null;
     documentModel = null;
+
+    constructor(mongoDBUrl, documentModel) {
+        super();
+        this.useCache = false;
+        this.documentModel = documentModel;
+    }
 
     getRemotePath(path) {
         var pathStr = path.toString();
@@ -35,7 +40,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
 
     getMetaData(path, callback) {
         const { documentId } = this.getPathInformation(path);
-        console.log(path)
         if (this.useCache && this.resources[documentId] && this.resources[documentId].metadata) {
             callback(undefined, this.resources[documentId].metadata);
         } else {
@@ -47,7 +51,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
                 });
             } else {
                 this.documentModel.findOne({ documentId }).then(document => {
-                    console.log(document)
                     if (!this.resources[documentId]) {
                         this.resources[documentId].metadata = {};
                     }
@@ -89,14 +92,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
         })
     }
 
-    constructor(mongoDBUrl) {
-        super();
-        this.useCache = false;
-        this.database = new Database();
-        const connection = this.database.createConnection(mongoDBUrl);
-        this.documentModel = this.database.getModel(connection, 'document', 'documents');
-    }
-
     _rename(pathFrom, newName, ctx, callback) {
         //Rename not supported
     }
@@ -110,7 +105,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     };
 
     _openWriteStream(path, ctx, callback) {
-        console.log("_openWriteStream")
         this.getMetaData(path, (err, metadata) => {
             if (err) {
                 callback(webdav.Errors.ResourceNotFound);
@@ -142,7 +136,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     };
 
     _openReadStream(path, ctx, callback) {
-        console.log("_openReadStream")
         this.getMetaData(path, (err, metadata) => {
             if (err) {
                 callback(webdav.Errors.ResourceNotFound);
@@ -175,7 +168,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     };
 
     _size(path, ctx, callback) {
-        console.log("_size")
         const { documentVersion, documentId } = this.getPathInformation(path);
         if (this.useCache && this.resources[documentId] && this.resources[documentId].size) {
             callback(undefined, this.resources[documentId].size)
@@ -184,10 +176,7 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
                 if (err) {
                     callback(webdav.Errors.ResourceNotFound);
                 }
-
-                console.log("metadata", metadata)
                 const documentKey = metadata.key;
-
                 this.getFileData(documentKey, documentVersion, (err, data) => {
                     if (err) {
                         callback(webdav.Errors.ResourceNotFound)
@@ -205,7 +194,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     };
 
     _lockManager(path, ctx, callback) {
-        console.log("_lockManager")
         const { documentId } = this.getPathInformation(path);
         this.getMetaData(path, (e) => {
             if (e) {
@@ -223,7 +211,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     };
 
     _propertyManager(path, ctx, callback) {
-        console.log("_propertyManager")
         this.getMetaData(path, (e) => {
             if (e) {
                 return callback(webdav.Errors.ResourceNotFound);
@@ -244,7 +231,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     };
 
     _creationDate(path, ctx, callback) {
-        console.log("_creationDate")
         this._lastModifiedDate(path, ctx, callback);
 
         this.getMetaData(path, (e, data) => {
@@ -256,7 +242,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     };
 
     _lastModifiedDate(path, ctx, callback) {
-        console.log("_lastModifiedDate")
         this.getMetaData(path, (e, data) => {
             if (e)
                 return callback(webdav.Errors.ResourceNotFound);
@@ -266,7 +251,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     };
 
     _type(path, ctx, callback) {
-        console.log("_type")
         const { documentId } = this.getPathInformation(path);
         if (this.useCache && this.resources[documentId] && this.resources[documentId].type) {
             callback(undefined, this.resources[documentId].type);
@@ -287,7 +271,6 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     };
 
     _mimeType(path, ctx, callback) {
-        console.log("_mimeType")
         this.getMetaData(path, (e, data) => {
             if (e)
                 return callback(webdav.Errors.ResourceNotFound);

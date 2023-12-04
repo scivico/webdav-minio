@@ -16,7 +16,12 @@
   "author": "Sandun Isuru Niraj",
   "license": "ISC",
   "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@mui/material": "^5.14.19",
     "aws-sdk": "^2.1454.0",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "etag": "^1.8.1",
     "express": "^4.18.2",
@@ -25,6 +30,7 @@
     "mime-lookup": "0.0.2",
     "moment": "^2.29.4",
     "mongoose": "^7.5.1",
+    "uuid": "^9.0.1",
     "webdav-server": "^2.6.2"
   }
 }
