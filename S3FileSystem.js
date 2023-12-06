@@ -7,19 +7,17 @@ var mime = new MimeLookup(require('mime-db'));
 const s3 = new AWS.S3({ region: 'us-east-1' });
 const _ = require('lodash');
 var etag = require('etag');
+const { DocumentModel } = require('./database/dbHelper');
 const bucketName = process.env.BUCKET_NAME;
 
 module.exports = class S3FileSystem extends webdav.FileSystem {
 
     useCache = false;
     resources = {};
-    database = null;
-    documentModel = null;
 
-    constructor(mongoDBUrl, documentModel) {
+    constructor() {
         super();
         this.useCache = false;
-        this.documentModel = documentModel;
     }
 
     getRemotePath(path) {
@@ -50,7 +48,8 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
                     size: 0
                 });
             } else {
-                this.documentModel.findOne({ documentId }).then(document => {
+                DocumentModel.findOne({ documentId }).then(document => {
+                    console.log(document)
                     if (!this.resources[documentId]) {
                         this.resources[documentId].metadata = {};
                     }
@@ -124,7 +123,7 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
                     }
                 })
             });
-            this.documentModel.updateOne({ documentId: metadata.documentId }, {
+            DocumentModel.updateOne({ documentId: metadata.documentId }, {
                 $set: {
                     updatedOn: new Date().toISOString()
                 }

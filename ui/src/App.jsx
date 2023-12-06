@@ -21,7 +21,6 @@ function App() {
     let excelRegex = new RegExp('^(csv|ods|xls|xls[b,x,m])$');
     let wordRegex = new RegExp('^(doc|doc[m|x]|dot|dot[m,x]|odt|rtf)$');
     let powerpointRegex = new RegExp('^(odp|pot|pot[|m|x]|pps|pps[m,x]|ppt|ppt[m,x])$');
-    let onenoteRegex = new RegExp('^(one|onetoc2)$');
     let visioRegex = new RegExp('^(one|onetoc2)$');
 
     if (excelRegex.test(extension.toLowerCase())) {
@@ -34,10 +33,6 @@ function App() {
 
     if (powerpointRegex.test(extension.toLowerCase())) {
       return 'ms-powerpoint';
-    }
-
-    if (onenoteRegex.test(extension.toLowerCase())) {
-      return 'ms-word';
     }
 
     if (visioRegex.test(extension.toLowerCase())) {

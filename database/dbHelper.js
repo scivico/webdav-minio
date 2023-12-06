@@ -1,29 +1,14 @@
-const { createConnection } = require("mongoose");
-const { DocumentSchema } = require("./schema/DocumentSchema");
-const _ = require('lodash');
-let cachedConnection = null;
+const { connect, connection, model } = require("mongoose")
+const mongoDBUrl = process.env.MONGODB_URL;
 
-module.exports = class Database{
-    modelMapper = {
-        document: {
-            schema: DocumentSchema,
-            name: "Document"
-        }
-    };
+connect(mongoDBUrl);
+const db = connection;
 
-    createConnection(connectionString) {
-        if (!cachedConnection) {
-            cachedConnection = createConnection(connectionString);
-        }
+db.on('error', console.error.bind(console, 'connection error:'));
+db.once('open', function () {
+    console.log('Connected to MongoDB');
+})
 
-        return cachedConnection;
-    }
+const { DocumentSchema } = require("./schema/DocumentSchema")
 
-    getModel(connection, key, tableName) {
-        if (_.includes(_.keys(this.modelMapper), key)) {
-            const model = this.modelMapper[key];
-            return connection.models[model.name] || connection.model(model.name, model.schema, tableName);
-        }
-        return new Error('Invalid Key');
-    }
-}
+module.exports.DocumentModel = model('Document', DocumentSchema, "documents");
