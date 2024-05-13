@@ -1,13 +1,17 @@
 const webdav = require('webdav-server').v2;
 const express = require('express');
 const cors = require("cors");
-const AWS = require('aws-sdk');
+const Minio = require('minio');
 const { v4: uuidv4 } = require('uuid');
 const bodyParser = require("body-parser");
-require('dotenv').config()
-const S3FileSystem = require('./S3FileSystem');
+require('dotenv').config();
+const MinIOFileSystem = require('./MinIOFileSystem');
 const { DocumentModel } = require('./database/dbHelper');
 const bucketName = process.env.BUCKET_NAME;
+const minioEndpoint = process.env.MINIO_ENDPOINT;
+const minioPort = process.env.MINIO_PORT;
+const minioAccessKey = process.env.MINIO_ACCESS_KEY;
+const minioSecretKey = process.env.MINIO_SECRET_KEY;
 
 const userManager = new webdav.SimpleUserManager();
 userManager.addUser("TestUser", "TestUser01", true);
@@ -49,15 +53,15 @@ const setHeaders = (arg) => {
         arg.response.setHeader("Access-Control-Allow-Origin", "*");
     }
     arg.response.setHeader("MS-Author-Via", "DAV");
-}
+};
 
 const server = new webdav.WebDAVServer({
     httpAuthentication: new HTTPNoAuthentication(userManager, 'Default realm')
 });
 
-server.setFileSystem('/webdav', new S3FileSystem(), (success) => {
+server.setFileSystem('/webdav', new MinIOFileSystem(), (success) => {
     console.log('READY');
-})
+});
 
 server.beforeRequest((arg, next) => {
     setHeaders(arg);
@@ -67,25 +71,32 @@ server.beforeRequest((arg, next) => {
 app.get("/getFiles", cors(), async (req, res) => {
     try {
         const files = await DocumentModel.find({});
-        res.status(200).json({ files })
+        res.status(200).json({ files });
     } catch (e) {
-        res.status(500).json({ error: e.message })
+        res.status(500).json({ error: e.message });
     }
 });
 
 app.post("/getSignedUrl", cors(), async (req, res) => {
     try {
-        const s3 = new AWS.S3({ region: 'us-east-1' });
         const { filename, type } = req.body;
         const extension = filename.split(".").pop();
         const documentId = uuidv4();
-        
-        const signedUrl = await s3.getSignedUrlPromise('putObject', {
-            Bucket: bucketName,
-            Key: `${documentId}.${extension}`,
-            ContentType: type,
-            Expires: 60,
+
+        const minioClient = new Minio.Client({
+            endPoint: minioEndpoint,
+            port: 9000,
+            useSSL: false,
+            accessKey: minioAccessKey,
+            secretKey: minioSecretKey
         });
+
+        // Genera una URL firmada
+        const signedUrl = await minioClient.presignedPutObject(
+            bucketName,
+            `${documentId}.${extension}`, // Aquí podrías utilizar `${documentId}.${extension}`
+            60 // La duración de la URL firmada en segundos
+        );
 
         const file = {
             documentId: documentId,
@@ -94,14 +105,14 @@ app.post("/getSignedUrl", cors(), async (req, res) => {
             updatedOn: new Date(),
             extension: extension,
             key: `${documentId}.${extension}`,
-        }
+        };
 
         await DocumentModel.create(file);
-        res.status(200).json({ signedUrl })
+        res.status(200).json({ signedUrl });
     } catch (e) {
-        res.status(500).json({ error: e.message })
+        res.status(500).json({ error: e.message });
     }
-})
+});
 
 app.use(webdav.extensions.express('/', server));
 

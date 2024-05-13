@@ -4,13 +4,17 @@ const webdav = require('webdav-server').v2;
 const AWS = require('aws-sdk');
 var MimeLookup = require('mime-lookup');
 var mime = new MimeLookup(require('mime-db'));
-const s3 = new AWS.S3({ region: 'us-east-1' });
+const Minio = require('minio');
 const _ = require('lodash');
 var etag = require('etag');
 const { DocumentModel } = require('./database/dbHelper');
 const bucketName = process.env.BUCKET_NAME;
+const minioEndpoint = process.env.MINIO_ENDPOINT;
+const minioPort = process.env.MINIO_PORT;
+const minioAccessKey = process.env.MINIO_ACCESS_KEY;
+const minioSecretKey = process.env.MINIO_SECRET_KEY;
 
-module.exports = class S3FileSystem extends webdav.FileSystem {
+module.exports = class MinIOFileSystem extends webdav.FileSystem {
 
     useCache = false;
     resources = {};
@@ -49,14 +53,12 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
                 });
             } else {
                 DocumentModel.findOne({ documentId }).then(document => {
-                    console.log(document)
                     if (!this.resources[documentId]) {
                         this.resources[documentId].metadata = {};
                     }
                     this.resources[documentId].metadata = document;
                     callback(undefined, document);
                 }).catch(err => {
-                    console.log(err)
                     callback(err);
                 });
             }
@@ -64,12 +66,19 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     }
 
     getFileData(key, version, callback) {
-        s3.listObjectVersions({
+        const minioClient = new Minio.Client({
+            endPoint: minioEndpoint,
+            port: 9000,
+            useSSL: false,
+            accessKey: minioAccessKey,
+            secretKey: minioSecretKey
+        });
+
+        minioClient.listObjectVersions({
             Bucket: bucketName,
             Prefix: key
         }, (e, versionData) => {
             if (e) {
-                console.log(e)
                 callback(webdav.Errors.ResourceNotFound);
             }
             const isLatest = version === "latest";
@@ -80,9 +89,8 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
             }
             if (versionData.Versions.length) params.VersionId = requestedVersion;
 
-            s3.getObject(params, (err, fileData) => {
+            minioClient.getObject(params, (err, fileData) => {
                 if (err) {
-                    console.log(err)
                     callback(webdav.Errors.ResourceNotFound);
                 }
 
@@ -113,7 +121,15 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
             let content = [];
             let stream = new webdav.VirtualFileWritable(content);
             stream.on('finish', () => {
-                s3.upload({
+                const minioClient = new Minio.Client({
+                    endPoint: minioEndpoint,
+                    port: 9000,
+                    useSSL: false,
+                    accessKey: minioAccessKey,
+                    secretKey: minioSecretKey
+                });
+
+                minioClient.putObject({
                     Bucket: bucketName,
                     Key: documentKey,
                     Body: Buffer.concat(content)
@@ -121,7 +137,7 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
                     if (err) {
                         console.log(err);
                     }
-                })
+                });
             });
             DocumentModel.updateOne({ documentId: metadata.documentId }, {
                 $set: {
@@ -130,7 +146,7 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
             }).then(data => {
                 callback(null, stream);
             })
-            
+
         })
     };
 
@@ -145,14 +161,14 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
 
             if (ctx.context.request.headers['if-none-match'] === etagValue) {
                 console.log('Returning 304 as file has not changed.');
-                ctx.context.response.statusCode = 304
+                ctx.context.response.statusCode = 304;
                 ctx.context.response.end();
                 return;
             }
 
             this.getFileData(documentKey, documentVersion, (err, data) => {
                 if (err) {
-                    callback(webdav.Errors.ResourceNotFound)
+                    callback(webdav.Errors.ResourceNotFound);
                 }
 
                 const content = data.content;
@@ -161,7 +177,7 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
                 ctx.context.response.setHeader('etag', etagValue);
                 ctx.context.response.setHeader('Content-type', contentType);
 
-                callback(undefined, stream)
+                callback(undefined, stream);
             })
         });
     };
@@ -169,7 +185,7 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
     _size(path, ctx, callback) {
         const { documentVersion, documentId } = this.getPathInformation(path);
         if (this.useCache && this.resources[documentId] && this.resources[documentId].size) {
-            callback(undefined, this.resources[documentId].size)
+            callback(undefined, this.resources[documentId].size);
         } else {
             this.getMetaData(path, (err, metadata) => {
                 if (err) {
@@ -178,7 +194,7 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
                 const documentKey = metadata.key;
                 this.getFileData(documentKey, documentVersion, (err, data) => {
                     if (err) {
-                        callback(webdav.Errors.ResourceNotFound)
+                        callback(webdav.Errors.ResourceNotFound);
                     }
                     const size = data.size;
 
@@ -205,7 +221,7 @@ module.exports = class S3FileSystem extends webdav.FileSystem {
             if (!this.resources[documentId].locks)
                 this.resources[documentId].locks = new webdav.LocalLockManager();
 
-            callback(undefined, this.resources[documentId].locks); 
+            callback(undefined, this.resources[documentId].locks);
         })
     };
 
